@@ -13,6 +13,8 @@
     button:focus-visible, select:focus-visible { outline: 2px solid #1b7967; outline-offset: 2px; }
     .topbar { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 14px 24px; padding: 15px 24px; background: #fff; border-bottom: 1px solid #dce3df; }
     .heading { min-width: 0; }
+    .home-link { display: inline-flex; margin-bottom: 5px; color: #236f60; font-size: 12px; font-weight: 650; text-decoration: none; }
+    .home-link:hover, .home-link:focus-visible { color: #154f43; text-decoration: underline; outline: none; }
     h1 { margin: 0; font-size: 20px; font-weight: 650; letter-spacing: 0; }
     .subtitle { margin-top: 3px; color: #647371; font-size: 12px; }
     .controls { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; }
@@ -100,6 +102,7 @@
 <body>
   <header class="topbar">
     <div class="heading">
+      <a class="home-link" href="https://fishneedlegrandfather.github.io/visual/">← 返回首页</a>
       <h1>Case 1 · 电流与 RCS</h1>
       <div class="subtitle" id="metadata">读取数据中</div>
     </div>
