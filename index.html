@@ -158,16 +158,17 @@
     <section class="chart-panel" aria-label="单站 RCS">
       <div class="chart-header"><div class="panel-title">单站 RCS</div><div class="panel-detail" id="rcs-range">入射/观察方位角 · dBsm</div>
         <label><span class="control-label">入射天顶角 θ</span><select id="rcs-theta" aria-label="单站 RCS 天顶角"></select></label>
-        <div class="chart-legend"><span class="series-key" style="--key:#d8783b">PO</span><span class="series-key" style="--key:#2768ad">MoM</span><span class="series-key" style="--key:#238c69">预测</span></div>
+        <div class="chart-legend"><span class="series-key" style="--key:#d8783b">PO</span><span class="series-key" style="--key:#2768ad">MoM</span><span class="series-key" style="--key:#238c69">预测</span><span class="series-key" id="extra-rcs-key" style="--key:#8b5fbf;display:none">FEKO 二次反射</span></div>
       </div>
       <div class="chart-wrap"><canvas id="rcs-chart" aria-label="RCS 曲线图"></canvas><div id="tooltip"></div></div>
-      <div class="note"><strong>计算口径：</strong>单站 RCS 由每个入射方向的三角元复电流做远场积分估算，不是 FEKO 直接导出的远场结果。电流着色显示 |Re J|，相对误差使用全部实部与虚部。</div>
+      <div class="note" id="rcs-note"><strong>计算口径：</strong>单站 RCS 由每个入射方向的三角元复电流做远场积分估算，不是 FEKO 直接导出的远场结果。电流着色显示 |Re J|，相对误差使用全部实部与虚部。</div>
     </section>
   </main>
   <script src="x_data.js"></script>
   <script src="v_data.js"></script>
   <script src="c_data.js"></script>
   <script src="slicy_data.js"></script>
+  <script src="slicy_second_reflection_rcs.js"></script>
   <script src="feiji_data.js"></script>
   <script src="single_data.js"></script>
   <script src="coupling_data.js"></script>
@@ -183,6 +184,7 @@
     const caseKey = ['x', 'v', 'c', 'slicy', 'feiji', 'single'].includes(requestedCase) ? requestedCase : 'x';
     const data = window.VIS_DATA_CASES?.[caseKey];
     if (!data) throw new Error(`${caseKey}_data.js is missing; run generate_allangle_viewer.py`);
+    const extraRcs = window.EXTRA_RCS_CASES?.[caseKey] || null;
     const graph = window.COUPLING_DATA_CASES?.[caseKey];
     if (!graph || graph.triangles !== data.triangle_count) throw new Error(`Coupling data for ${caseKey} is missing or mismatched`);
     document.querySelector('[data-view="current"]').textContent = '电流 / RCS';
@@ -208,7 +210,7 @@
       clusterMembers.g2[graph.c12[g1]]++;
     });
     const modeNames = ['PO', 'MoM', '预测', 'PO 误差', '预测误差'];
-    const curveColors = ['#d8783b', '#2768ad', '#238c69'];
+    const curveColors = ['#d8783b', '#2768ad', '#238c69', '#8b5fbf'];
     const colorStops = [[40,76,155], [39,162,160], [234,211,80], [224,77,53]];
     const thetaSummary = data.rcs.theta_deg.map(theta => `${theta}°`).join('/');
     const phiCount = data.rcs.phi_deg.length;
@@ -599,9 +601,25 @@
     const tooltip = document.getElementById('tooltip');
     let chartArea = null;
     let hoverPhi = null;
+    function selectedExtraCurve() {
+      if (!extraRcs) return null;
+      const theta = data.rcs.theta_deg[Number(thetaSelect.value)];
+      const thetaIndex = extraRcs.theta_deg.indexOf(theta);
+      if (thetaIndex < 0) return null;
+      const samePhiGrid = extraRcs.phi_deg.length === data.rcs.phi_deg.length
+        && extraRcs.phi_deg.every((phi, index) => phi === data.rcs.phi_deg[index]);
+      if (!samePhiGrid) throw new Error(`Extra RCS grid for ${caseKey} does not match the viewer grid`);
+      return extraRcs.rcs_db[thetaIndex];
+    }
     function selectedCurves() {
       const thetaIndex = Number(thetaSelect.value);
-      return data.rcs.rcs_db.map(method => method[thetaIndex]);
+      const curves = data.rcs.rcs_db.map(method => method[thetaIndex]);
+      const extraCurve = selectedExtraCurve();
+      document.getElementById('extra-rcs-key').style.display = extraCurve ? '' : 'none';
+      document.getElementById('rcs-note').innerHTML = extraCurve
+        ? '<strong>计算口径：</strong>PO、MoM 与预测曲线由三角元复电流做远场积分估算；FEKO 二次反射曲线来自 FEKO 原生远场（2 次 PO 反射）。电流着色显示 |Re J|，相对误差使用全部实部与虚部。'
+        : '<strong>计算口径：</strong>单站 RCS 由每个入射方向的三角元复电流做远场积分估算，不是 FEKO 直接导出的远场结果。电流着色显示 |Re J|，相对误差使用全部实部与虚部。';
+      return extraCurve ? [...curves, extraCurve] : curves;
     }
     function rcsRmse(curve, reference) {
       return Math.sqrt(curve.reduce((total, value, index) => total + (value - reference[index]) ** 2, 0) / curve.length);
@@ -679,7 +697,8 @@
       const index = Math.max(0, Math.min(phis.length - 1, Math.round((x - chartArea.left) / chartArea.width * (phis.length - 1))));
       hoverPhi = phis[index];
       const curves = selectedCurves();
-      tooltip.innerHTML = `θ ${data.rcs.theta_deg[Number(thetaSelect.value)]}° · φ ${hoverPhi}°<br>PO ${curves[0][index].toFixed(2)} dBsm<br>MoM ${curves[1][index].toFixed(2)} dBsm<br>预测 ${curves[2][index].toFixed(2)} dBsm`;
+      const extraLine = curves[3] === undefined ? '' : `<br>FEKO 二次反射 ${curves[3][index].toFixed(2)} dBsm`;
+      tooltip.innerHTML = `θ ${data.rcs.theta_deg[Number(thetaSelect.value)]}° · φ ${hoverPhi}°<br>PO ${curves[0][index].toFixed(2)} dBsm<br>MoM ${curves[1][index].toFixed(2)} dBsm<br>预测 ${curves[2][index].toFixed(2)} dBsm${extraLine}`;
       tooltip.style.display = 'block';
       tooltip.style.left = `${Math.min(x + 12, rect.width - tooltip.offsetWidth - 8)}px`;
       tooltip.style.top = `${Math.max(4, Math.min(event.clientY - rect.top - 22, rect.height - tooltip.offsetHeight - 5))}px`;
