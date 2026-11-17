@@ -111,6 +111,9 @@
         <a href="?case=x" role="tab" data-case="x">case2_02 (X)</a>
         <a href="?case=v" role="tab" data-case="v">case2_13 (V)</a>
         <a href="?case=c" role="tab" data-case="c">case5_16 (C)</a>
+        <a href="?case=slicy" role="tab" data-case="slicy">SLICY</a>
+        <a href="?case=feiji" role="tab" data-case="feiji">飞机</a>
+        <a href="?case=single" role="tab" data-case="single">Case single</a>
       </nav>
       <div class="segmented" role="group" aria-label="显示视图">
         <button type="button" data-view="current" aria-pressed="true">电流 / RCS</button>
@@ -142,8 +145,8 @@
   <section class="metrics" aria-label="电流与单站 RCS 误差">
     <div class="metric"><div class="label">PO 电流相对误差</div><div class="value" id="po-rel">—</div><div class="sub">相对 MoM，复电流 L2</div></div>
     <div class="metric"><div class="label">预测电流相对误差</div><div class="value" id="pred-rel">—</div><div class="sub">相对 MoM，复电流 L2</div></div>
-    <div class="metric"><div class="label">PO 单站 RCS 误差</div><div class="value" id="po-rmse">—</div><div class="sub">当前 θ，18 个 φ 的 RMSE</div></div>
-    <div class="metric"><div class="label">预测单站 RCS 误差</div><div class="value" id="pred-rmse">—</div><div class="sub">当前 θ，18 个 φ 的 RMSE</div></div>
+    <div class="metric"><div class="label">PO 单站 RCS 误差</div><div class="value" id="po-rmse">—</div><div class="sub" id="po-rmse-detail">当前 θ 的 RMSE</div></div>
+    <div class="metric"><div class="label">预测单站 RCS 误差</div><div class="value" id="pred-rmse">—</div><div class="sub" id="pred-rmse-detail">当前 θ 的 RMSE</div></div>
   </section>
   <main class="workspace">
     <section class="mesh-panel" aria-label="三维表面电流">
@@ -153,7 +156,7 @@
       <div id="mesh-error"></div>
     </section>
     <section class="chart-panel" aria-label="单站 RCS">
-      <div class="chart-header"><div class="panel-title">单站 RCS</div><div class="panel-detail">入射/观察方位角 φ = 5°–175° · dBsm</div>
+      <div class="chart-header"><div class="panel-title">单站 RCS</div><div class="panel-detail" id="rcs-range">入射/观察方位角 · dBsm</div>
         <label><span class="control-label">入射天顶角 θ</span><select id="rcs-theta" aria-label="单站 RCS 天顶角"></select></label>
         <div class="chart-legend"><span class="series-key" style="--key:#d8783b">PO</span><span class="series-key" style="--key:#2768ad">MoM</span><span class="series-key" style="--key:#238c69">预测</span></div>
       </div>
@@ -164,14 +167,20 @@
   <script src="x_data.js"></script>
   <script src="v_data.js"></script>
   <script src="c_data.js"></script>
+  <script src="slicy_data.js"></script>
+  <script src="feiji_data.js"></script>
+  <script src="single_data.js"></script>
   <script src="coupling_data.js"></script>
+  <script src="slicy_coupling_data.js"></script>
+  <script src="feiji_coupling_data.js"></script>
+  <script src="single_coupling_data.js"></script>
   <script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"}}</script>
   <script type="module">
     import * as THREE from 'three';
     import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
     const requestedCase = new URLSearchParams(location.search).get('case');
-    const caseKey = ['x', 'v', 'c'].includes(requestedCase) ? requestedCase : 'x';
+    const caseKey = ['x', 'v', 'c', 'slicy', 'feiji', 'single'].includes(requestedCase) ? requestedCase : 'x';
     const data = window.VIS_DATA_CASES?.[caseKey];
     if (!data) throw new Error(`${caseKey}_data.js is missing; run generate_allangle_viewer.py`);
     const graph = window.COUPLING_DATA_CASES?.[caseKey];
@@ -201,8 +210,16 @@
     const modeNames = ['PO', 'MoM', '预测', 'PO 误差', '预测误差'];
     const curveColors = ['#d8783b', '#2768ad', '#238c69'];
     const colorStops = [[40,76,155], [39,162,160], [234,211,80], [224,77,53]];
+    const thetaSummary = data.rcs.theta_deg.map(theta => `${theta}°`).join('/');
+    const phiCount = data.rcs.phi_deg.length;
+    const phiFirst = data.rcs.phi_deg[0];
+    const phiLast = data.rcs.phi_deg[data.rcs.phi_deg.length - 1];
+    const datasetSummary = `${(data.frequency_hz / 1e9).toFixed(2)} GHz · θ = ${thetaSummary}，每个 θ 有 ${phiCount} 个 φ 方向 · ${data.triangle_count.toLocaleString()} 三角元 · checkpoint epoch ${data.checkpoint_epoch}`;
 
-    document.getElementById('metadata').textContent = `${(data.frequency_hz / 1e9).toFixed(2)} GHz · θ = 40°/50°，各 18 个 φ 方向 · ${data.triangle_count.toLocaleString()} 三角元 · checkpoint epoch ${data.checkpoint_epoch}`;
+    document.getElementById('metadata').textContent = datasetSummary;
+    document.getElementById('po-rmse-detail').textContent = `当前 θ，${phiCount} 个 φ 的 RMSE`;
+    document.getElementById('pred-rmse-detail').textContent = `当前 θ，${phiCount} 个 φ 的 RMSE`;
+    document.getElementById('rcs-range').textContent = `入射/观察方位角 φ = ${phiFirst}°–${phiLast}° · dBsm`;
     data.angles.forEach((entry, index) => {
       const option = document.createElement('option');
       option.value = index;
@@ -566,7 +583,7 @@
       document.title = `${data.case_label} | ${graphView ? '聚类与耦合' : '电流 / RCS'}`;
       document.getElementById('metadata').textContent = graphView
         ? `${data.triangle_count.toLocaleString()} 三角元 · ${graph.cluster_method === 'connected_kmeans_6d' ? '几何边约束 ' : ''}6 维 KMeans（法向权重 ${graph.normal_weight}） · G1 ${graph.counts.g1}（平均约 ${graph.cluster_targets.triangles_per_g1} 面元） · G2 ${graph.counts.g2}（平均约 ${graph.cluster_targets.g1_per_g2} 个 G1）`
-        : `${(data.frequency_hz / 1e9).toFixed(2)} GHz · θ = 40°/50°，各 18 个 φ 方向 · ${data.triangle_count.toLocaleString()} 三角元 · checkpoint epoch ${data.checkpoint_epoch}`;
+        : datasetSummary;
       if (overlayGroup) overlayGroup.visible = graphView;
       if (wireMesh) wireMesh.visible = graphView && document.getElementById('graph-wireframe').checked;
       if (renderer) renderer.setClearColor(graphView ? '#111315' : '#e9efed');
