@@ -628,6 +628,9 @@
       const curves = selectedCurves();
       document.getElementById('po-rmse').textContent = `${rcsRmse(curves[0], curves[1]).toFixed(2)} dB`;
       document.getElementById('pred-rmse').textContent = `${rcsRmse(curves[2], curves[1]).toFixed(2)} dB`;
+      document.getElementById('extra-rcs-key').textContent = curves[3] === undefined
+        ? 'FEKO 二次反射'
+        : `FEKO 二次反射 · RMSE ${rcsRmse(curves[3], curves[1]).toFixed(2)} dB`;
     }
     function drawChart() {
       const curves = selectedCurves();
